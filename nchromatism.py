@@ -1,3 +1,6 @@
+import spectra
+import functools
+import itertools
 import math
 import os
 import sys
@@ -8,6 +11,7 @@ from PIL import Image, ImageOps
 import svgwrite
 from pathlib import Path
 Path.ls = lambda self: list(self.iterdir())
+import colour
 
 # from svglib.svglib import svg2rlg
 # from reportlab.graphics import renderPM
@@ -18,6 +22,7 @@ import argparse
 angles = [i*45 for i in range(4)]
 pixelSize = 5
 invertColor = False
+cmyk_colors = ['cyan', 'magenta', 'yellow', 'black']
 
 ap = argparse.ArgumentParser()
 ap.add_argument("-i", "--image", required=True, type=str, help="The input image path or input folder.")
@@ -25,6 +30,7 @@ ap.add_argument("-o", "--output", default=None, type=str, help="The output image
 ap.add_argument("-ps", "--pixel_size", default=pixelSize, type=int, help="The pixel size.")
 ap.add_argument("-a", "--angles", nargs='+', default=angles, help="The angles to use (if not in CMYK mode).")
 ap.add_argument("-ic", "--invert_color", action='store_true', help="Invert colors before vectorizing.")
+ap.add_argument("-co", "--colors", nargs='+', default=cmyk_colors, help="The colors to use to render the image.")
 ap.add_argument("-c", "--cmyk", action='store_true', help="CMYK mode (this implies 4 angles), defaultl is grayscale.")
 ap.add_argument("-r", "--resize", default=None, type=int, help="Resize images to given size before processing.")
 ap.add_argument("-e", "--equalize", action='store_true', help="Equalize image before processing.")
@@ -45,6 +51,19 @@ equalize = args.equalize
 strokeWidth = args.stroke_width
 output_arg = Path(args.output) if args.output else image_path if image_path.is_dir() else image_path.parent
 showIntermediateImages = args.show_images
+
+# Blend the input colors
+colors = []
+
+def blend(color_tuple):
+    return functools.reduce(lambda x, y: x.blend(y, ratio=0.5), color_tuple)
+
+cmyk_colors = [spectra.html(c).to('cmyk') for c in args.colors]
+
+for i in range(1, len(cmyk_colors)):
+    colors.append(blend(itertools.combinations(cmyk_colors, i)))
+
+# colors = [c.to('rgb') for c in colors]
 
 if image_path.is_dir():
     output_arg.mkdir(exist_ok=True, parents=True)
@@ -110,6 +129,11 @@ for image_path in images:
         image = image.convert('RGB')
         # r, g, b = image.split()
         rgb = np.asarray(image)
+        
+        cmy = colour.RGB_to_CMY(rgb)
+        cmyk = colour.CMY_to_CMYK(cmy)
+        image = Image.fromarray(cmyk.astype(np.uint8), mode='CMYK')
+
         # c, m, y, k = rgb_to_cmyk(rgb[:,:,2], rgb[:,:,1], rgb[:,:,0])
         c, m, y, k = rgb_to_cmyk(rgb[:,:,0], rgb[:,:,1], rgb[:,:,2])
         # image = Image.merge('CMYK', (k, y, m, c))
@@ -260,6 +284,9 @@ for image_path in images:
         lineEndPoint = None
         strokeColor = cmykColors[i] if args.cmyk else ('white' if invertColor else 'black')
         hlines = scaleGroup.add(drawing.g(id='hlines-'+str(i), stroke=(strokeColor), stroke_width=strokeWidth, opacity=1))
+
+        # image_lab = colour.XYZ_to_Lab(colour.RGB_to_XYZ(image_rgb))
+        # delta_E = colour.delta_E(image1_lab, image2_lab)
 
         for (n, yt, xt) in indices:
             xi = xt.item()
