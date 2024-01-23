@@ -13,6 +13,12 @@ from pathlib import Path
 Path.ls = lambda self: list(self.iterdir())
 import colour
 
+# Line version:
+# - CYMK: 4 levels: all lines, 3/4 lines, 1/2 lines, 1/4 lines.
+# - Other space, find their component values (bruteforce ? Or read https://www.ryanjuckett.com/rgb-color-space-conversion/)
+# ZigZag version: from low res image, draw each pixel with a zigzag whose frequence depends on the intensity, with interpolation
+
+
 # from svglib.svglib import svg2rlg
 # from reportlab.graphics import renderPM
 
@@ -31,10 +37,10 @@ ap.add_argument("-ps", "--pixel_size", default=pixelSize, type=int, help="The pi
 ap.add_argument("-a", "--angles", nargs='+', default=angles, help="The angles to use (if not in CMYK mode).")
 ap.add_argument("-ic", "--invert_color", action='store_true', help="Invert colors before vectorizing.")
 ap.add_argument("-co", "--colors", nargs='+', default=cmyk_colors, help="The colors to use to render the image.")
-ap.add_argument("-c", "--cmyk", action='store_true', help="CMYK mode (this implies 4 angles), defaultl is grayscale.")
+ap.add_argument("-c", "--cmyk", action='store_true', help="CMYK mode (this implies 4 angles), default is grayscale.")
 ap.add_argument("-r", "--resize", default=None, type=int, help="Resize images to given size before processing.")
 ap.add_argument("-e", "--equalize", action='store_true', help="Equalize image before processing.")
-ap.add_argument("-sw", "--stroke_width", default=1, type=int, help="Stroke width.")
+ap.add_argument("-sw", "--stroke_width", default=1, type=float, help="Stroke width.")
 ap.add_argument("-si", "--show_images", action='store_true', help="Show intermediate images.")
 
 args = ap.parse_args()
@@ -53,17 +59,26 @@ output_arg = Path(args.output) if args.output else image_path if image_path.is_d
 showIntermediateImages = args.show_images
 
 # Blend the input colors
-colors = []
+# colors = []
 
-def blend(color_tuple):
-    return functools.reduce(lambda x, y: x.blend(y, ratio=0.5), color_tuple)
+# def blend(color_tuple):
+#     return color_tuple[0] if len(color_tuple) == 1 else functools.reduce(lambda x, y: x.blend(y, ratio=0.5), color_tuple)
 
-cmyk_colors = [spectra.html(c).to('cmyk') for c in args.colors]
+# cmyk_colors = [spectra.html(c).to('cmyk') for c in args.colors]
 
-for i in range(1, len(cmyk_colors)):
-    colors.append(blend(itertools.combinations(cmyk_colors, i)))
+# for i in range(1, len(cmyk_colors)):
+#     colors.append(blend(list(itertools.combinations(cmyk_colors, i))))
 
 # colors = [c.to('rgb') for c in colors]
+
+shape = ['M', (0, 1/2), 'S', (1/3, 0), 'S', (2/3, 1), 'S', (1, 1/2)]
+
+
+def zipzag(position, size, shape):
+    return [c if type(c) is str else tuple(np.array(position) + c * np.array(size)) for c in shape]
+
+def shape_to_svg(shape):
+    return ' '.join([p for c in shape for p in c])
 
 if image_path.is_dir():
     output_arg.mkdir(exist_ok=True, parents=True)
@@ -130,9 +145,9 @@ for image_path in images:
         # r, g, b = image.split()
         rgb = np.asarray(image)
         
-        cmy = colour.RGB_to_CMY(rgb)
-        cmyk = colour.CMY_to_CMYK(cmy)
-        image = Image.fromarray(cmyk.astype(np.uint8), mode='CMYK')
+        # cmy = colour.RGB_to_CMY(rgb)
+        # cmyk = colour.CMY_to_CMYK(cmy)
+        # image = Image.fromarray(cmyk.astype(np.uint8), mode='CMYK')
 
         # c, m, y, k = rgb_to_cmyk(rgb[:,:,2], rgb[:,:,1], rgb[:,:,0])
         c, m, y, k = rgb_to_cmyk(rgb[:,:,0], rgb[:,:,1], rgb[:,:,2])
@@ -247,10 +262,22 @@ for image_path in images:
     # scaled_channels = scaled.split()
     cmykColors = ['cyan', 'magenta', 'yellow', 'black']#[::-1]
     
+
     for i, angle in enumerate(angles):
         channel = scaled[i].unsqueeze(0) if args.cmyk else scaled
         # showTensor(channel, f'Channel {i}', mode='L')
         rotated = transforms.functional.rotate(channel.clone(), angle, expand=True, fill=0 if invertColor else 1)
+            
+        masks = torch.zeros((5,) + rotated.shape[1:])
+        
+        masks[1,::4,:] = 1
+        masks[2,::2,:] = 1
+        masks[3,::2,:] = 1
+        masks[3,::3,:] = 1
+        masks[4,::1,:] = 1
+
+        shape_indices = torch.from_numpy(np.indices(rotated.shape[1:]))
+
         # showTensor(rotated, f'Rotated {i}', mode='L')
         channels, rotatedHeight, rotatedWidth = rotated.shape
         # offsetY = rotatedHeight - smallHeight
@@ -258,7 +285,11 @@ for image_path in images:
 
         # thresholded = (rotated < (i+1) / nColors).int()
         # thresholded = ( rotated > unique[i] + 1e-6 if invertColor else rotated < unique[i] + 1e-6 ).int() 
-        thresholded = (rotated > 0.5).char()
+
+        indices = (rotated * 4).int()
+        thresholded = masks[indices.squeeze(), shape_indices[0], shape_indices[1]].unsqueeze(0)
+        # thresholded = masks[indices, *shape_indices]
+
 
         # thresholded[:, :, 0] = 1
 
@@ -275,7 +306,7 @@ for image_path in images:
         # import ipdb ; ipdb.set_trace()
         # di = diff != 0
 
-        indices = torch.nonzero(diff)
+        diff_indices = torch.nonzero(diff)
         lastYi = 0
 
         # angleRad = 2.0 * math.pi * angle / 360
@@ -288,7 +319,7 @@ for image_path in images:
         # image_lab = colour.XYZ_to_Lab(colour.RGB_to_XYZ(image_rgb))
         # delta_E = colour.delta_E(image1_lab, image2_lab)
 
-        for (n, yt, xt) in indices:
+        for (n, yt, xt) in diff_indices:
             xi = xt.item()
             yi = yt.item()
             x = xi + (frameWidth - rotatedWidth) / 2

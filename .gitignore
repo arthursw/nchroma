@@ -1,1 +1,4 @@
 env/
+bckp/
+*_nchroma.png
+*_nchroma.svg
