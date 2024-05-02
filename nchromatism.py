@@ -27,7 +27,6 @@ Path.ls = lambda self: list(self.iterdir())
 
 angles = [i*45 for i in range(4)]
 pixelSize = 5
-invertColor = False
 cmyk_colors = ['cyan', 'magenta', 'yellow', 'black']
 
 ap = argparse.ArgumentParser()
@@ -35,7 +34,6 @@ ap.add_argument("-i", "--image", required=True, type=str, help="The input image 
 ap.add_argument("-o", "--output", default=None, type=str, help="The output image path or output folder (default is input_image_nchroma.svg).")
 ap.add_argument("-ps", "--pixel_size", default=pixelSize, type=int, help="The pixel size.")
 ap.add_argument("-a", "--angles", nargs='+', default=angles, help="The angles to use (if not in CMYK mode).")
-ap.add_argument("-ic", "--invert_color", action='store_true', help="Invert colors before vectorizing.")
 ap.add_argument("-co", "--colors", nargs='+', default=cmyk_colors, help="The colors to use to render the image.")
 ap.add_argument("-c", "--cmyk", action='store_true', help="CMYK mode (this implies 4 angles), default is grayscale.")
 ap.add_argument("-r", "--resize", default=None, type=int, help="Resize images to given size before processing.")
@@ -51,7 +49,6 @@ if not image_path.exists():
 
 pixelSize = args.pixel_size
 angles = args.angles if not args.cmyk else angles
-invertColor = args.invert_color
 resize = args.resize
 equalize = args.equalize
 strokeWidth = args.stroke_width
@@ -249,11 +246,9 @@ for image_path in images:
     # rotated = transforms.functional.rotate(scaled, 90, expand=True, fill=0)
     # showTensor(rotated>0.1)
 
-    if invertColor:
-        background = drawing.add(drawing.rect((0, 0), (pixelSize * frameWidth, pixelSize * frameHeight), fill='black'))
     scaleGroup = drawing.add(drawing.g(id='scale-group'))
 
-    contour = 0 if invertColor else 1
+    contour = 1
     scaled[:, :, 0] = contour
     scaled[:, :, -1] = contour
     scaled[:, 0, :] = contour
@@ -266,7 +261,7 @@ for image_path in images:
     for i, angle in enumerate(angles):
         channel = scaled[i].unsqueeze(0) if args.cmyk else scaled
         # showTensor(channel, f'Channel {i}', mode='L')
-        rotated = transforms.functional.rotate(channel.clone(), angle, expand=True, fill=0 if invertColor else 1)
+        rotated = transforms.functional.rotate(channel.clone(), angle, expand=True, fill=torch.nan)
             
         masks = torch.zeros((5,) + rotated.shape[1:])
         
@@ -306,14 +301,14 @@ for image_path in images:
         # import ipdb ; ipdb.set_trace()
         # di = diff != 0
 
-        diff_indices = torch.nonzero(diff)
+        diff_indices = torch.nonzero(torch.nan_to_num(diff, nan=0))
         lastYi = 0
 
         # angleRad = 2.0 * math.pi * angle / 360
 
         lineStartPoint = None
         lineEndPoint = None
-        strokeColor = cmykColors[i] if args.cmyk else ('white' if invertColor else 'black')
+        strokeColor = cmykColors[i] if args.cmyk else 'black'
         hlines = scaleGroup.add(drawing.g(id='hlines-'+str(i), stroke=(strokeColor), stroke_width=strokeWidth, opacity=1))
 
         # image_lab = colour.XYZ_to_Lab(colour.RGB_to_XYZ(image_rgb))
