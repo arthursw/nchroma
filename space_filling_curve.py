@@ -50,7 +50,6 @@ stepM = sin(pi/3) # medium step
 stepL = 1 # large step
 curve_size = 2 + stepS
 delta = np.array([curve_size, stepM]) # start to end vector
-ratio = 1 / curve_size
 delta_to_one = 1 / np.linalg.norm(delta)
 angle_a = get_angle_rad(delta)
 
@@ -64,7 +63,7 @@ for i in range(1, n_iterations):
 	# p = pow(2, i)
 	# lrimage = ndimage.convolve(np.asarray(image).astype(np.float64), np.ones((p, p)), mode='reflect')  / pow(p, 2)
 
-	lrimage = ndimage.gaussian_filter(image, sigma=pow(ratio,n_iterations-i)*image.width)
+	lrimage = ndimage.gaussian_filter(image, sigma=pow(delta_to_one, n_iterations-i)*image.width)
 	# lrimage = ndimage.minimum_filter(image, footprint=disk_mask(pow(ratio,n_iterations-i)*image.width))
 
 	# show_small_image(lrimage)
@@ -78,7 +77,7 @@ def get_intensity(image, point):
 	point = point.astype(np.int64)
 	if point[0] < 0 or point[0] >= image.shape[0] or point[1] < 0 or point[1] >= image.shape[1]:
 		return 255
-	return image[point[0], point[1]]
+	return image[point[1], point[0]]
 
 def gosper(images, n, p1, p2, threshold, points, invert=False):
 	if n >= len(images):
@@ -116,7 +115,13 @@ def gosper(images, n, p1, p2, threshold, points, invert=False):
 	# 	else:
 	# 		points.append([p1,p2])
 	
-	intensity = get_intensity(images[-n-1], (p1 + p2) / 2)
+	# Read the pixel at the center of the corresponding hexagone c, not in the middle of p1 and p2
+	p2p1 = p2 - p1
+	p2p1_length = np.linalg.norm(p2p1)
+	c = p1 + rotate_v(p2p1/p2p1_length, pi/6) * ( p2p1_length / sqrt(3) )
+
+	# intensity = get_intensity(images[-n-1], (p1 + p2) / 2)
+	intensity = get_intensity(images[-n-1], c)
 	if n<2 or intensity < threshold:
 		for i in range(1, len(new_points)):
 			p1, p2 = new_points[i-1], new_points[i]
@@ -127,16 +132,25 @@ def gosper(images, n, p1, p2, threshold, points, invert=False):
 			p1, p2 = new_points[i-1], new_points[i]
 			points.append([p1,p2])
 
-pixels_per_unit = image.size[1] / 2
-offset = (1 - 2 * ratio) / 2
-p1 = np.array([0, -offset ]) * pixels_per_unit
-p2 = np.array([stepM, curve_size]) * pixels_per_unit
+# Define p1 and p2, the start and end points of the curve
+# Points are defined in the image space, unit is pixel
+margin = 0
+square_side = image.size[1] + margin
+# The side square_side of a square perfectly within an hexagon of side hexagon_side follows the equation: square_side = hexagon_side * (3 - sqrt(3))
+hexagon_side = square_side / (3 - sqrt(3))
+p1 = np.array([-hexagon_side * sqrt(3) / 2, -hexagon_side / 2]) + np.array([square_side / 2, square_side / 2])
+p2 = np.array([ hexagon_side * sqrt(3) / 2, -hexagon_side / 2]) + np.array([square_side / 2, square_side / 2])
 
-# p1 = np.array([0, 0 ]) * pixels_per_unit
+# offset = (1 - 2 * ratio) / 2
+# p1 = np.array([0, -offset ]) * pixels_per_unit
+# p2 = np.array([stepM, curve_size]) * pixels_per_unit
+# p1 = np.array([0, 1]) * pixels_per_unit
 # p2 = np.array([1, 1]) * pixels_per_unit
 points = []
-gosper(images, 0, p1, p2, 250, points)
+print('generating points...')
+gosper(images, 0, p2, p1, 250, points)
 
+print('generating svg...')
 # points2 = []
 # gosper(images, 1, p1, p2, 250, points2)
 
@@ -147,10 +161,10 @@ svgName = 'indian.svg'
 frame_width, frame_height = 1000, 1000
 # idealViewBox = f'0 0 {frame_width} {frame_height}'
 # offset *= image.size[0]
-offset = 500
-viewBox = f'{-offset} {-offset} {frame_width + 2*offset} {frame_height + 2*offset}'
+# offset = 500
+viewBox = f'{p1[0]} {-(hexagon_side - (square_side / 2))} {p2[0] - p1[0]} {2 * hexagon_side}'
 drawing = svgwrite.Drawing(svgName, width=frame_width, height=frame_height, viewBox=viewBox)
-group = drawing.add(drawing.g(id='scale-group', stroke='black', stroke_width=0.1, opacity=1, fill='none'))
+group = drawing.add(drawing.g(id='scale-group', stroke='black', stroke_width=0.2, opacity=1, fill='none'))
 for pl in points:
 	# group.add(drawing.polyline(id='space-filling-curve', stroke='black', stroke_width=0.1, opacity=1, fill='none', points=pl))
 	group.add(drawing.line(pl[0], pl[1]))
@@ -162,7 +176,7 @@ for pl in points:
 # group.add(drawing.polyline(id='space-filling-curve', stroke='green', stroke_width=0.1, opacity=1, fill='none', points=pl))
 group.add(drawing.circle(center=p1, r=10, fill='green'))
 group.add(drawing.circle(center=p2, r=10, fill='red'))
-group.scale(frame_width / image.size[0])
+
 drawing.save()
 # print('converting svg to png...')
 

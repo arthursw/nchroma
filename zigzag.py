@@ -3,7 +3,7 @@ import sys
 import numpy as np
 import torch
 from torchvision import transforms
-import colour
+# import colour
 from PIL import Image
 import svgwrite
 from pathlib import Path
@@ -18,7 +18,7 @@ Path.ls = lambda self: list(self.iterdir())
 # from svglib.svglib import svg2rlg
 # from reportlab.graphics import renderPM
 
-from cairosvg import svg2png
+# from cairosvg import svg2png
 import argparse
 from scipy.interpolate import pchip_interpolate
 
@@ -266,9 +266,9 @@ for image_path in images:
         hlines.rotate(angle, (frame_width / 2, frame_height / 2))
 
     drawing.save()
-    print('converting svg to png...')
+    # print('converting svg to png...')
 
-    svg2png(url=svgName, write_to=output_path + '.png')
+    # svg2png(url=svgName, write_to=output_path + '.png')
     # drawing = svg2rlg(svgName)
 
 

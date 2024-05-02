@@ -1,7 +1,8 @@
-import spectra
-import functools
-import itertools
-import math
+# import spectra
+# import functools
+# import itertools
+# import math
+# import colour
 import os
 import sys
 import numpy as np
@@ -9,9 +10,10 @@ import torch
 from torchvision import transforms
 from PIL import Image, ImageOps
 import svgwrite
+# import cairosvg
+import argparse
 from pathlib import Path
 Path.ls = lambda self: list(self.iterdir())
-import colour
 
 # Line version:
 # - CYMK: 4 levels: all lines, 3/4 lines, 1/2 lines, 1/4 lines.
@@ -22,8 +24,6 @@ import colour
 # from svglib.svglib import svg2rlg
 # from reportlab.graphics import renderPM
 
-import cairosvg
-import argparse
 
 angles = [i*45 for i in range(4)]
 pixelSize = 5
@@ -347,9 +347,9 @@ for image_path in images:
         hlines.rotate(angle, (pixelSize * frameWidth / 2, pixelSize * frameHeight / 2))
 
     drawing.save()
-    print('converting svg to png...')
+    # print('converting svg to png...')
 
-    cairosvg.svg2png(url=svgName, write_to=output_path + '.png')
+    # cairosvg.svg2png(url=svgName, write_to=output_path + '.png')
     # drawing = svg2rlg(svgName)
 
 
