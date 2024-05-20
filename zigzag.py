@@ -27,8 +27,8 @@ ap = argparse.ArgumentParser()
 ap.add_argument("-i", "--image", required=True, type=str, help="The input image path or input folder.")
 ap.add_argument("-o", "--output", default=None, type=str, help="The output image path or output folder (default is input_image_nchroma.svg).")
 ap.add_argument("-fs", "--frame_size", default='1000x650', type=str, help="The size of the frame (format is WIDTHxHEIGHT, default is 1000x650).")
-ap.add_argument("-pw", "--pixel_width", default=10, type=float, help="The pixel width (pixels are square).")
-ap.add_argument("-sw", "--stroke_width", default=1, type=float, help="The pen width.")
+ap.add_argument("-pw", "--pixel_width", default=5, type=float, help="The pixel width (pixels are square).")
+ap.add_argument("-sw", "--stroke_width", default=0.8, type=float, help="The pen width.")
 
 args = ap.parse_args()
 

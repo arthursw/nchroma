@@ -26,7 +26,7 @@ Path.ls = lambda self: list(self.iterdir())
 
 
 angles = [i*45 for i in range(4)]
-pixelSize = 5
+pixelSize = 1
 cmyk_colors = ['cyan', 'magenta', 'yellow', 'black']
 
 ap = argparse.ArgumentParser()
@@ -35,10 +35,10 @@ ap.add_argument("-o", "--output", default=None, type=str, help="The output image
 ap.add_argument("-ps", "--pixel_size", default=pixelSize, type=int, help="The pixel size.")
 ap.add_argument("-a", "--angles", nargs='+', default=angles, help="The angles to use (if not in CMYK mode).")
 ap.add_argument("-co", "--colors", nargs='+', default=cmyk_colors, help="The colors to use to render the image.")
-ap.add_argument("-c", "--cmyk", action='store_true', help="CMYK mode (this implies 4 angles), default is grayscale.")
+ap.add_argument("-g", "--grayscale", action='store_true', help="Grayscale mode, default is CMYK (this implies 4 angles).")
 ap.add_argument("-r", "--resize", default=None, type=int, help="Resize images to given size before processing.")
 ap.add_argument("-e", "--equalize", action='store_true', help="Equalize image before processing.")
-ap.add_argument("-sw", "--stroke_width", default=1, type=float, help="Stroke width.")
+ap.add_argument("-sw", "--stroke_width", default=0.75, type=float, help="Stroke width.")
 ap.add_argument("-si", "--show_images", action='store_true', help="Show intermediate images.")
 
 args = ap.parse_args()
@@ -48,7 +48,7 @@ if not image_path.exists():
     sys.exit('Unable to find image', image_path)
 
 pixelSize = args.pixel_size
-angles = args.angles if not args.cmyk else angles
+angles = args.angles if args.grayscale else angles
 resize = args.resize
 equalize = args.equalize
 strokeWidth = args.stroke_width
@@ -136,7 +136,7 @@ for image_path in images:
         newsize = (maxSize, image.height * maxSize // image.imwidth) if image.width > maxSize else (image.width * maxSize // image.height, maxSize)
         image = image.resize(newsize)
 
-    if args.cmyk:
+    if not args.grayscale:
         # image = image.quantize(colors=nColors, kmeans=nColors)
         image = image.convert('RGB')
         # r, g, b = image.split()
@@ -166,7 +166,7 @@ for image_path in images:
     # image = torch.tensor(image)
 
     # tfs = transforms.Compose([transforms.Grayscale(), transforms.ToTensor(), transforms.Normalize(0.5, 0.5)])
-    tfs = transforms.Compose([transforms.ToTensor()]) if args.cmyk else transforms.Compose([transforms.Grayscale(), transforms.ToTensor()])
+    tfs = transforms.Compose([transforms.ToTensor()]) if not args.grayscale else transforms.Compose([transforms.Grayscale(), transforms.ToTensor()])
     # tfs = transforms.Compose([transforms.ToTensor()])
     height, width = image.size
     print(height, width)
@@ -248,18 +248,18 @@ for image_path in images:
 
     scaleGroup = drawing.add(drawing.g(id='scale-group'))
 
-    contour = 1
-    scaled[:, :, 0] = contour
-    scaled[:, :, -1] = contour
-    scaled[:, 0, :] = contour
-    scaled[:, -1, :] = contour
+    # contour = 1
+    # scaled[:, :, 0] = contour
+    # scaled[:, :, -1] = contour
+    # scaled[:, 0, :] = contour
+    # scaled[:, -1, :] = contour
 
     # scaled_channels = scaled.split()
     cmykColors = ['cyan', 'magenta', 'yellow', 'black']#[::-1]
     
 
     for i, angle in enumerate(angles):
-        channel = scaled[i].unsqueeze(0) if args.cmyk else scaled
+        channel = scaled[i].unsqueeze(0) if not args.grayscale else scaled
         # showTensor(channel, f'Channel {i}', mode='L')
         rotated = transforms.functional.rotate(channel.clone(), angle, expand=True, fill=torch.nan)
             
@@ -308,7 +308,7 @@ for image_path in images:
 
         lineStartPoint = None
         lineEndPoint = None
-        strokeColor = cmykColors[i] if args.cmyk else 'black'
+        strokeColor = cmykColors[i] if not args.grayscale else 'black'
         hlines = scaleGroup.add(drawing.g(id='hlines-'+str(i), stroke=(strokeColor), stroke_width=strokeWidth, opacity=1))
 
         # image_lab = colour.XYZ_to_Lab(colour.RGB_to_XYZ(image_rgb))
