@@ -1,4 +1,5 @@
 Pillow==10.1.0
+pillow-avif-plugin==1.4.3
 svgwrite==1.4.3
 torch==2.2.1
 torchvision==0.17.1

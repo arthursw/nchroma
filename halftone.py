@@ -1,9 +1,9 @@
 import os
 import sys
 import numpy as np
+import pillow_avif # necessary to be able to import .avif
 import torch
 from torchvision import transforms
-import colour
 from PIL import Image
 import svgwrite
 from pathlib import Path
@@ -20,7 +20,6 @@ Path.ls = lambda self: list(self.iterdir())
 
 from cairosvg import svg2png
 import argparse
-from scipy.interpolate import pchip_interpolate
 
 
 ap = argparse.ArgumentParser()
@@ -84,7 +83,7 @@ for image_path in images:
     
     print(image_path)
     
-    if image_path.suffix not in ['.jpg', '.jpeg', '.png']: continue
+    if image_path.suffix not in ['.jpg', '.jpeg', '.png', '.avif']: continue
 
     image = Image.open(str(image_path))
     # a = np.zeros((250,250,3))
@@ -92,10 +91,13 @@ for image_path in images:
     # a[:,:,1] = 0
     # a[:,:,2] = 255
     # image = Image.fromarray(a.astype(np.uint8))
+    if image.mode == 'RGBA':
+        background = Image.new('RGBA', image.size, (255, 255, 255))
+        image = Image.alpha_composite(background, image)
 
     image_name = os.path.splitext(image_path.name)[0] + '_nchroma' if output_arg.is_dir() else output_arg
     output_path = str(output_arg / image_name if output_arg.is_dir() else image_path.parent / image_name)
-
+    
     image = image.convert('RGB')
     # r, g, b = image.split()
     # image.show()

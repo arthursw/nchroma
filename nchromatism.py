@@ -14,6 +14,7 @@ import svgwrite
 import argparse
 from pathlib import Path
 Path.ls = lambda self: list(self.iterdir())
+import pillow_avif
 
 # Line version:
 # - CYMK: 4 levels: all lines, 3/4 lines, 1/2 lines, 1/4 lines.
@@ -45,7 +46,7 @@ args = ap.parse_args()
 
 image_path = Path(args.image)
 if not image_path.exists():
-    sys.exit('Unable to find image', image_path)
+    sys.exit(f'Unable to find image {image_path}')
 
 pixelSize = args.pixel_size
 angles = args.angles if args.grayscale else angles
@@ -118,8 +119,10 @@ def cmyk_to_rgb(c,m,y,k):
 for image_path in images:
     
     print(image_path)
-    
-    if image_path.suffix not in ['.jpg', '.jpeg', '.png']: continue
+
+    if image_path.suffix not in ['.jpg', '.jpeg', '.png', '.avif']: 
+        print(f'Warning, the file {image_path} extension is not recognized ; it will be ignored.')
+        continue
 
     image = Image.open(str(image_path))
     # a = np.zeros((250,250,3))
@@ -127,6 +130,11 @@ for image_path in images:
     # a[:,:,1] = 0
     # a[:,:,2] = 255
     # image = Image.fromarray(a.astype(np.uint8))
+
+    # If image has transparency, make it white
+    if image.mode == 'RGBA':
+        background = Image.new('RGBA', image.size, (255, 255, 255))
+        image = Image.alpha_composite(background, image)
 
     image_name = os.path.splitext(image_path.name)[0] + '_nchroma' if output_arg.is_dir() else output_arg
     output_path = str(output_arg / image_name if output_arg.is_dir() else image_path.parent / image_name)
@@ -340,6 +348,7 @@ for image_path in images:
             lastYi = yi
         
         hlines.rotate(angle, (pixelSize * frameWidth / 2, pixelSize * frameHeight / 2))
+        hlines.update({'style':'mix-blend-mode: multiply;'})
 
     drawing.save()
     # print('converting svg to png...')
