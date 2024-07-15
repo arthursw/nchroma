@@ -30,7 +30,7 @@ angles = [i*45 for i in range(4)]
 pixelSize = 1
 cmyk_colors = ['cyan', 'magenta', 'yellow', 'black']
 
-ap = argparse.ArgumentParser()
+ap = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 ap.add_argument("-i", "--image", required=True, type=str, help="The input image path or input folder.")
 ap.add_argument("-o", "--output", default=None, type=str, help="The output image path or output folder (default is input_image_nchroma.svg).")
 ap.add_argument("-ps", "--pixel_size", default=pixelSize, type=int, help="The pixel size.")
@@ -39,7 +39,14 @@ ap.add_argument("-co", "--colors", nargs='+', default=cmyk_colors, help="The col
 ap.add_argument("-g", "--grayscale", action='store_true', help="Grayscale mode, default is CMYK (this implies 4 angles).")
 ap.add_argument("-r", "--resize", default=None, type=int, help="Resize images to given size before processing.")
 ap.add_argument("-e", "--equalize", action='store_true', help="Equalize image before processing.")
-ap.add_argument("-sw", "--stroke_width", default=0.75, type=float, help="Stroke width.")
+ap.add_argument('-pw', '--paperWidth', help='Paper width in mm.', default=500, type=float)
+ap.add_argument('-ph', '--paperHeight', help='Paper height in mm.', default=650, type=float)
+ap.add_argument('-m', '--margin', type=float, help='Margin in mm', default=30)
+ap.add_argument('-ox', '--offset_x', type=float, help='X offset in mm (-20 is good for 650 x 500 on silhouette cameo pro 4)', default=0)
+ap.add_argument('-oy', '--offset_y', type=float, help='Y offset in mm', default=0)
+ap.add_argument("-sw", "--stroke_width", default=0.75, type=float, help="Stroke width (mm).")
+# ap.add_argument("-bbc", "--bounding_box_color", default=None, type=str, help="Bounding box color (CSS color).")
+ap.add_argument('-df', '--drawFrames', action='store_true', help='Draw the drawing bounding box and the paper rectangle')
 ap.add_argument("-si", "--show_images", action='store_true', help="Show intermediate images.")
 
 args = ap.parse_args()
@@ -52,9 +59,11 @@ pixelSize = args.pixel_size
 angles = args.angles if args.grayscale else angles
 resize = args.resize
 equalize = args.equalize
+
 strokeWidth = args.stroke_width
 output_arg = Path(args.output) if args.output else image_path if image_path.is_dir() else image_path.parent
 showIntermediateImages = args.show_images
+
 
 # Blend the input colors
 # colors = []
@@ -177,12 +186,12 @@ for image_path in images:
     tfs = transforms.Compose([transforms.ToTensor()]) if not args.grayscale else transforms.Compose([transforms.Grayscale(), transforms.ToTensor()])
     # tfs = transforms.Compose([transforms.ToTensor()])
     height, width = image.size
-    print(height, width)
+    # print(height, width)
     image = tfs(image)
     # torchvision.transforms.functional.affine(img: torch.Tensor, angle: float, translate: List[int], scale: float, shear: List[float], interpolation: torchvision.transforms.functional.InterpolationMode = <InterpolationMode.NEAREST: 'nearest'>, fill: Union[List[float], NoneType] = None, resample: Union[int, NoneType] = None, fillcolor: Union[List[float], NoneType] = None) → torch.Tensor
 
     channels, height, width = image.shape
-    print(height, width, channels)
+    # print(height, width, channels)
     
     toPIL = transforms.ToPILImage()
 
@@ -228,13 +237,75 @@ for image_path in images:
     # x_in_bigger_frame = x + (bigger_frame_width - rotated_image_width) / 2
     # that way all x_in_bigger_frame and y_in_bigger_frame will be in the same coord system
 
+    # def fitSourceInReference(source, reference):
+    #     sourceRatio = source['width'] / source['height']
+    #     referenceRatio = reference['width'] / reference['height']
+    #     if sourceRatio > referenceRatio:
+    #         source['width'] = reference['width']
+    #         source['height'] = source['width'] / sourceRatio
+    #         source['x'] = reference['x']
+    #         source['y'] = reference['y'] + (reference['height'] - source['height']) / 2
+    #     else:
+    #         source['height'] = reference['height']
+    #         source['width'] = source['height'] * sourceRatio
+    #         source['y'] = reference['y']
+    #         source['x'] = reference['x'] + (reference['width'] - source['width']) / 2
+    #     return source
+
     frameWidth = 2 * smallWidth
     frameHeight = 2 * smallHeight
 
-    svgName = output_path + '.svg'
-    viewBox = f'{pixelSize * smallWidth // 2} {pixelSize * smallHeight // 2} {pixelSize * smallWidth} {pixelSize * smallHeight}'
-    drawing = svgwrite.Drawing(svgName, height=100, width=100, viewBox=viewBox)
 
+
+    finalWidth = pixelSize * smallWidth
+    finalHeight = pixelSize * smallHeight
+    paperRatio = (args.paperWidth - 2 * args.margin) / (args.paperHeight - 2 * args.margin)
+    drawingRatio = finalWidth / finalHeight
+
+    if paperRatio > drawingRatio: # paper is wider compared to drawing: margin are defined vertically
+        mmToUnit = finalHeight / (args.paperHeight - 2 * args.margin)
+        marginV = args.margin * mmToUnit
+        wp = finalHeight * paperRatio
+        marginH = marginV + (wp - finalWidth) / 2
+        totalWidth = args.paperWidth * mmToUnit
+        marginH2 = (totalWidth - finalWidth) / 2
+        assert(marginH > marginV)
+        assert(abs(marginH - marginH2) < 1e-6)
+    else: # paper is taller compared to drawing: margin are defined horizontally
+        mmToUnit = finalWidth / (args.paperWidth - 2 * args.margin)
+        marginH = args.margin * mmToUnit
+        hp = finalWidth / paperRatio
+        marginV = marginH + (hp - finalHeight) / 2 
+        totalHeight = args.paperHeight * mmToUnit
+        marginV2 = (totalHeight - finalHeight) / 2
+        assert(marginV > marginH)
+        assert(abs(marginV - marginV2) < 1e-6)
+
+    offsetX = args.offset_x * mmToUnit
+    offsetY = args.offset_y * mmToUnit
+
+    svgName = output_path + '.svg'
+    minX = finalWidth // 2
+    minY = finalHeight // 2
+
+    # frame = dict(x=minX, y=minY, width=finalWidth, height=finalHeight)
+    # fitSourceInReference(frame, dict(x=0, y=0, ))
+
+    viewBox = dict(x=minX - marginH - offsetX, y=minY - marginV - offsetY, width=finalWidth + 2 * marginH, height=finalHeight + 2 * marginV)
+    viewBoxString = f'{viewBox["x"]:.5} {viewBox["y"]:.5} {viewBox["width"]:.5} {viewBox["height"]:.5}'
+    drawing = svgwrite.Drawing(svgName, size=(f'{args.paperWidth}mm', f'{args.paperHeight}mm'), viewBox=viewBoxString)
+
+    # if args.bounding_box_color:
+    #     drawing.add(drawing.rect(x=marginH+offsetX, y=marginV+offsetY, width=finalWidth, height=finalHeight, stroke=args.bounding_box_color, stroke_width=1))
+    print(marginH, marginV)
+    print(viewBox["width"] / viewBox["height"])
+    print(650 / 500)
+    assert(abs(viewBox["width"] / viewBox["height"] - 650 / 500) < 1e-6)
+    if args.drawFrames:
+        drawing.add(drawing.rect(insert=(viewBox["x"], viewBox["y"]), size=(viewBox["width"], viewBox["height"]), fill='none', stroke='red', stroke_width=1))
+        # drawing.add(drawing.rect(insert=(minX, minY-verticalCorrection), size=(width, height * (viewBox["height"] + hc) / viewBox["height"] ), fill='none', stroke='green', stroke_width=1))
+        drawing.add(drawing.rect(insert=(viewBox["x"] + args.margin * mmToUnit + offsetX, viewBox["y"] + args.margin * mmToUnit + offsetY), size=(viewBox["width"] - 2 * args.margin * mmToUnit, viewBox["height"] - 2 * args.margin * mmToUnit), fill='none', stroke='green', stroke_width=1))
+        drawing.add(drawing.rect(insert=(minX, minY), size=(width, height), fill='none', stroke='blue', stroke_width=1))
 
     # def projectPoint(xi, yi, frameWidth, frameHeight, rotatedWidth, rotatedHeight, angleRad, pixelSize):
     #     x = xi + (frameWidth - rotatedWidth) / 2
@@ -329,6 +400,7 @@ for image_path in images:
             y = yi + (frameHeight - rotatedHeight) / 2
             x *= pixelSize
             y *= pixelSize
+            
             # x, y = projectPoint(xi, yi, frameWidth, frameHeight, rotatedWidth, rotatedHeight, angleRad, pixelSize)
             if yi != lastYi:
                 if lineStartPoint is not None:
@@ -349,7 +421,7 @@ for image_path in images:
         
         hlines.rotate(angle, (pixelSize * frameWidth / 2, pixelSize * frameHeight / 2))
         hlines.update({'style':'mix-blend-mode: multiply;'})
-
+    
     drawing.save()
     # print('converting svg to png...')
 

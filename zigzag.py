@@ -23,10 +23,10 @@ import argparse
 from scipy.interpolate import pchip_interpolate
 
 
-ap = argparse.ArgumentParser()
+ap = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 ap.add_argument("-i", "--image", required=True, type=str, help="The input image path or input folder.")
 ap.add_argument("-o", "--output", default=None, type=str, help="The output image path or output folder (default is input_image_nchroma.svg).")
-ap.add_argument("-fs", "--frame_size", default='1000x650', type=str, help="The size of the frame (format is WIDTHxHEIGHT, default is 1000x650).")
+ap.add_argument("-fs", "--frame_size", default='650mm x 500mm', type=str, help="The size of the frame (format is WIDTH x HEIGHT in CSS unit).")
 ap.add_argument("-pw", "--pixel_width", default=5, type=float, help="The pixel width (pixels are square).")
 ap.add_argument("-sw", "--stroke_width", default=0.8, type=float, help="The pen width.")
 
@@ -42,10 +42,10 @@ cmyk_colors = ['cyan', 'magenta', 'yellow', 'black']
 pixel_width = args.pixel_width
 stroke_width = args.stroke_width
 try:
-    frame_width, frame_height = args.frame_size.split('x')
+    frame_width, frame_height = args.frame_size.split(' x ')
     frame_width, frame_height = int(frame_width), int(frame_height)
 except Exception:
-    sys.exit('Error: arg frame_width must follow the format WIDTHxHEIGHT, for example 1000x650.')
+    sys.exit('Error: arg frame_width must follow the format WIDTH x HEIGHT, for example 1000 x 650.')
 
 shape_width = 4 * stroke_width
 n_shapes_per_pixel = pixel_width / shape_width
