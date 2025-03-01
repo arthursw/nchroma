@@ -27,24 +27,25 @@ import pillow_avif
 
 
 angles = [i*45 for i in range(4)]
-pixelSize = 1
+# pixelSize = 1
 cmyk_colors = ['cyan', 'magenta', 'yellow', 'black']
 
 ap = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 ap.add_argument("-i", "--image", required=True, type=str, help="The input image path or input folder.")
 ap.add_argument("-o", "--output", default=None, type=str, help="The output image path or output folder (default is input_image_nchroma.svg).")
-ap.add_argument("-ps", "--pixel_size", default=pixelSize, type=int, help="The pixel size.")
+# ap.add_argument("-ps", "--pixel_size", default=pixelSize, type=int, help="The pixel size.")
+ap.add_argument("-ls", "--line_spacing", default=0.4, type=float, help="The spacing between two lines in mm.")
 ap.add_argument("-a", "--angles", nargs='+', default=angles, help="The angles to use (if not in CMYK mode).")
 ap.add_argument("-co", "--colors", nargs='+', default=cmyk_colors, help="The colors to use to render the image.")
 ap.add_argument("-g", "--grayscale", action='store_true', help="Grayscale mode, default is CMYK (this implies 4 angles).")
-ap.add_argument("-r", "--resize", default=None, type=int, help="Resize images to given size before processing.")
+# ap.add_argument("-r", "--resize", default=None, type=int, help="Resize images to given size before processing.")
 ap.add_argument("-e", "--equalize", action='store_true', help="Equalize image before processing.")
 ap.add_argument('-pw', '--paperWidth', help='Paper width in mm.', default=500, type=float)
 ap.add_argument('-ph', '--paperHeight', help='Paper height in mm.', default=650, type=float)
 ap.add_argument('-m', '--margin', type=float, help='Margin in mm', default=30)
 ap.add_argument('-ox', '--offset_x', type=float, help='X offset in mm (-20 is good for 650 x 500 on silhouette cameo pro 4)', default=0)
-ap.add_argument('-oy', '--offset_y', type=float, help='Y offset in mm', default=0)
-ap.add_argument("-sw", "--stroke_width", default=0.75, type=float, help="Stroke width (mm).")
+ap.add_argument('-oy', '--offset_y', type=float, help='Y offset in mm (-5 is good for 650 x 500 on silhouette cameo pro 4 to center rollers)', default=0)
+ap.add_argument("-sw", "--stroke_width", default=0.4, type=float, help="Stroke width in mm.")
 # ap.add_argument("-bbc", "--bounding_box_color", default=None, type=str, help="Bounding box color (CSS color).")
 ap.add_argument('-df', '--drawFrames', action='store_true', help='Draw the drawing bounding box and the paper rectangle')
 ap.add_argument("-si", "--show_images", action='store_true', help="Show intermediate images.")
@@ -55,14 +56,14 @@ image_path = Path(args.image)
 if not image_path.exists():
     sys.exit(f'Unable to find image {image_path}')
 
-pixelSize = args.pixel_size
+# pixelSize = args.pixel_size
 angles = args.angles if args.grayscale else angles
-resize = args.resize
+# resize = args.resize
 equalize = args.equalize
 
-strokeWidth = args.stroke_width
 output_arg = Path(args.output) if args.output else image_path if image_path.is_dir() else image_path.parent
 showIntermediateImages = args.show_images
+
 
 
 # Blend the input colors
@@ -129,9 +130,9 @@ for image_path in images:
     
     print(image_path)
 
-    if image_path.suffix not in ['.jpg', '.jpeg', '.png', '.avif']: 
-        print(f'Warning, the file {image_path} extension is not recognized ; it will be ignored.')
-        continue
+    # if image_path.suffix not in ['.jpg', '.jpeg', '.png', '.avif']: 
+    #     print(f'Warning, the file {image_path} extension is not recognized ; it will be ignored.')
+    #     continue
 
     image = Image.open(str(image_path))
     # a = np.zeros((250,250,3))
@@ -145,14 +146,27 @@ for image_path in images:
         background = Image.new('RGBA', image.size, (255, 255, 255))
         image = Image.alpha_composite(background, image)
 
+    paperRatio = (args.paperWidth - 2 * args.margin) / (args.paperHeight - 2 * args.margin)
+    width, height = image.size
+
+    imageRatio = width / height
+    if paperRatio > imageRatio:
+        newImageHeight = (args.paperHeight - 2 * args.margin) / args.line_spacing
+        newImageWidth = newImageHeight * imageRatio
+    else:
+        newImageWidth = (args.paperWidth - 2 * args.margin) / args.line_spacing
+        newImageHeight = newImageWidth / imageRatio
+
     image_name = os.path.splitext(image_path.name)[0] + '_nchroma' if output_arg.is_dir() else output_arg
     output_path = str(output_arg / image_name if output_arg.is_dir() else image_path.parent / image_name)
 
-    if resize:
-        maxSize = resize
-        newsize = (maxSize, image.height * maxSize // image.imwidth) if image.width > maxSize else (image.width * maxSize // image.height, maxSize)
-        image = image.resize(newsize)
-
+    # if resize:
+    #     maxSize = resize
+    #     newsize = (maxSize, image.height * maxSize // image.imwidth) if image.width > maxSize else (image.width * maxSize // image.height, maxSize)
+    #     image = image.resize((newsize))
+    image = image.resize((int(newImageWidth), int(newImageHeight)))
+    width, height = image.size
+    imageRatio = width / height
     if not args.grayscale:
         # image = image.quantize(colors=nColors, kmeans=nColors)
         image = image.convert('RGB')
@@ -185,12 +199,12 @@ for image_path in images:
     # tfs = transforms.Compose([transforms.Grayscale(), transforms.ToTensor(), transforms.Normalize(0.5, 0.5)])
     tfs = transforms.Compose([transforms.ToTensor()]) if not args.grayscale else transforms.Compose([transforms.Grayscale(), transforms.ToTensor()])
     # tfs = transforms.Compose([transforms.ToTensor()])
-    height, width = image.size
+    
     # print(height, width)
     image = tfs(image)
     # torchvision.transforms.functional.affine(img: torch.Tensor, angle: float, translate: List[int], scale: float, shear: List[float], interpolation: torchvision.transforms.functional.InterpolationMode = <InterpolationMode.NEAREST: 'nearest'>, fill: Union[List[float], NoneType] = None, resample: Union[int, NoneType] = None, fillcolor: Union[List[float], NoneType] = None) → torch.Tensor
 
-    channels, height, width = image.shape
+    # channels, height, width = image.shape
     # print(height, width, channels)
     
     toPIL = transforms.ToPILImage()
@@ -212,7 +226,7 @@ for image_path in images:
     # showTensor(image, 'Initial')
 
     # scaled = transforms.functional.affine(image, angle=0, translate=[0,0], shear=0, scale=scale)
-    scaled = transforms.Resize([height//pixelSize, width//pixelSize], antialias=True)(image)
+    # scaled = transforms.Resize([height//pixelSize, width//pixelSize], antialias=True)(image)
 
     # showTensor(scaled, 'Scaled')
 
@@ -229,7 +243,7 @@ for image_path in images:
     # scaled = pad2d(scaled)
     # showTensor(scaled, 'Padded')
 
-    channels, smallHeight, smallWidth = scaled.shape
+    # channels, smallHeight, smallWidth = scaled.shape
 
     # Rotated images will have larger size, so coordinates will be differents from one image to another
     # to solve the problem, just pretend that images are in bigger frame of size 2*width, 2*height (or any size containing all rotated frames)
@@ -252,32 +266,31 @@ for image_path in images:
     #         source['x'] = reference['x'] + (reference['width'] - source['width']) / 2
     #     return source
 
-    frameWidth = 2 * smallWidth
-    frameHeight = 2 * smallHeight
+    frameWidth = 2 * width
+    frameHeight = 2 * height
 
 
 
-    finalWidth = pixelSize * smallWidth
-    finalHeight = pixelSize * smallHeight
-    paperRatio = (args.paperWidth - 2 * args.margin) / (args.paperHeight - 2 * args.margin)
-    drawingRatio = finalWidth / finalHeight
+    # finalWidth = pixelSize * smallWidth
+    # finalHeight = pixelSize * smallHeight
+    # drawingRatio = finalWidth / finalHeight
 
-    if paperRatio > drawingRatio: # paper is wider compared to drawing: margin are defined vertically
-        mmToUnit = finalHeight / (args.paperHeight - 2 * args.margin)
+    if paperRatio > imageRatio: # paper is wider compared to drawing: margin are defined vertically
+        mmToUnit = height / (args.paperHeight - 2 * args.margin)
         marginV = args.margin * mmToUnit
-        wp = finalHeight * paperRatio
-        marginH = marginV + (wp - finalWidth) / 2
+        wp = height * paperRatio
+        marginH = marginV + (wp - width) / 2
         totalWidth = args.paperWidth * mmToUnit
-        marginH2 = (totalWidth - finalWidth) / 2
+        marginH2 = (totalWidth - width) / 2
         assert(marginH > marginV)
         assert(abs(marginH - marginH2) < 1e-6)
     else: # paper is taller compared to drawing: margin are defined horizontally
-        mmToUnit = finalWidth / (args.paperWidth - 2 * args.margin)
+        mmToUnit = width / (args.paperWidth - 2 * args.margin)
         marginH = args.margin * mmToUnit
-        hp = finalWidth / paperRatio
-        marginV = marginH + (hp - finalHeight) / 2 
+        hp = width / paperRatio
+        marginV = marginH + (hp - height) / 2 
         totalHeight = args.paperHeight * mmToUnit
-        marginV2 = (totalHeight - finalHeight) / 2
+        marginV2 = (totalHeight - height) / 2
         assert(marginV > marginH)
         assert(abs(marginV - marginV2) < 1e-6)
 
@@ -285,22 +298,20 @@ for image_path in images:
     offsetY = args.offset_y * mmToUnit
 
     svgName = output_path + '.svg'
-    minX = finalWidth // 2
-    minY = finalHeight // 2
+    minX = width // 2
+    minY = height // 2
 
     # frame = dict(x=minX, y=minY, width=finalWidth, height=finalHeight)
     # fitSourceInReference(frame, dict(x=0, y=0, ))
 
-    viewBox = dict(x=minX - marginH - offsetX, y=minY - marginV - offsetY, width=finalWidth + 2 * marginH, height=finalHeight + 2 * marginV)
+    viewBox = dict(x=minX - marginH - offsetX, y=minY - marginV - offsetY, width=width + 2 * marginH, height=height + 2 * marginV)
     viewBoxString = f'{viewBox["x"]:.5} {viewBox["y"]:.5} {viewBox["width"]:.5} {viewBox["height"]:.5}'
     drawing = svgwrite.Drawing(svgName, size=(f'{args.paperWidth}mm', f'{args.paperHeight}mm'), viewBox=viewBoxString)
 
     # if args.bounding_box_color:
     #     drawing.add(drawing.rect(x=marginH+offsetX, y=marginV+offsetY, width=finalWidth, height=finalHeight, stroke=args.bounding_box_color, stroke_width=1))
-    print(marginH, marginV)
-    print(viewBox["width"] / viewBox["height"])
-    print(650 / 500)
-    assert(abs(viewBox["width"] / viewBox["height"] - 650 / 500) < 1e-6)
+
+    assert(abs(viewBox["width"] / viewBox["height"] - args.paperWidth / args.paperHeight) < 1e-6)
     if args.drawFrames:
         drawing.add(drawing.rect(insert=(viewBox["x"], viewBox["y"]), size=(viewBox["width"], viewBox["height"]), fill='none', stroke='red', stroke_width=1))
         # drawing.add(drawing.rect(insert=(minX, minY-verticalCorrection), size=(width, height * (viewBox["height"] + hc) / viewBox["height"] ), fill='none', stroke='green', stroke_width=1))
@@ -338,7 +349,7 @@ for image_path in images:
     
 
     for i, angle in enumerate(angles):
-        channel = scaled[i].unsqueeze(0) if not args.grayscale else scaled
+        channel = image[i].unsqueeze(0) if not args.grayscale else image
         # showTensor(channel, f'Channel {i}', mode='L')
         rotated = transforms.functional.rotate(channel.clone(), angle, expand=True, fill=torch.nan)
             
@@ -388,7 +399,7 @@ for image_path in images:
         lineStartPoint = None
         lineEndPoint = None
         strokeColor = cmykColors[i] if not args.grayscale else 'black'
-        hlines = scaleGroup.add(drawing.g(id='hlines-'+str(i), stroke=(strokeColor), stroke_width=strokeWidth, opacity=1))
+        hlines = scaleGroup.add(drawing.g(id='hlines-'+str(i), stroke=(strokeColor), stroke_width=args.stroke_width*mmToUnit, opacity=1))
 
         # image_lab = colour.XYZ_to_Lab(colour.RGB_to_XYZ(image_rgb))
         # delta_E = colour.delta_E(image1_lab, image2_lab)
@@ -398,8 +409,8 @@ for image_path in images:
             yi = yt.item()
             x = xi + (frameWidth - rotatedWidth) / 2
             y = yi + (frameHeight - rotatedHeight) / 2
-            x *= pixelSize
-            y *= pixelSize
+            # x *= pixelSize
+            # y *= pixelSize
             
             # x, y = projectPoint(xi, yi, frameWidth, frameHeight, rotatedWidth, rotatedHeight, angleRad, pixelSize)
             if yi != lastYi:
@@ -411,7 +422,8 @@ for image_path in images:
             if lineStartPoint is None:
                 lineStartPoint = (x, y)
                 # lineEndPoint = (pixelSize * (smallWidth - 1 + (frameWidth - rotatedWidth) / 2), y)
-                lineEndPoint = (pixelSize * (rotatedWidth + (frameWidth - rotatedWidth) / 2), y)
+                # lineEndPoint = (pixelSize * (rotatedWidth + (frameWidth - rotatedWidth) / 2), y)
+                lineEndPoint = ( rotatedWidth + (frameWidth - rotatedWidth) / 2, y )
                 # lineEndPoint = projectPoint(smallWidth-1, yi, frameWidth, frameHeight, rotatedWidth, rotatedHeight, angleRad, pixelSize)
             else:
                 # print('add on same line: ', lineStartPoint, '-', (x, y))
@@ -419,9 +431,11 @@ for image_path in images:
                 lineStartPoint = None
             lastYi = yi
         
-        hlines.rotate(angle, (pixelSize * frameWidth / 2, pixelSize * frameHeight / 2))
+        # hlines.rotate(angle, (pixelSize * frameWidth / 2, pixelSize * frameHeight / 2))
+        hlines.rotate(angle, (frameWidth / 2, frameHeight / 2))
         hlines.update({'style':'mix-blend-mode: multiply;'})
     
+    print('saving', svgName)
     drawing.save()
     # print('converting svg to png...')
 
